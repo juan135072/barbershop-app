@@ -1,39 +1,46 @@
 "use client";
 
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { createClientComponentClient } from "@/lib/supabase/client";
+import toast from "react-hot-toast";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const supabase = createClientComponentClient();
   const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    email: "",
+    password: ""
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError(null);
     setLoading(true);
 
-    const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
-
     try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
+      const { error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password
       });
 
-      if (result?.error) {
-        setError("Credenciales inválidas");
-      } else {
-        router.push("/dashboard");
-        router.refresh();
+      if (error) {
+        toast.error("Credenciales inválidas");
+        return;
       }
+
+      toast.success("Inicio de sesión exitoso");
+      router.push("/dashboard");
     } catch (error) {
-      setError("Ocurrió un error al iniciar sesión");
+      toast.error("Ocurrió un error al iniciar sesión");
     } finally {
       setLoading(false);
     }
@@ -57,11 +64,6 @@ export default function LoginPage() {
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <label htmlFor="email" className="sr-only">
@@ -72,6 +74,8 @@ export default function LoginPage() {
                 name="email"
                 type="email"
                 required
+                value={formData.email}
+                onChange={handleChange}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Email"
               />
@@ -85,6 +89,8 @@ export default function LoginPage() {
                 name="password"
                 type="password"
                 required
+                value={formData.password}
+                onChange={handleChange}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Contraseña"
               />
@@ -104,4 +110,4 @@ export default function LoginPage() {
       </div>
     </div>
   );
-} 
+}
