@@ -12,6 +12,18 @@ const nextConfig = {
   },
   images: {
     domains: ['ydgdmfpccfawlmqcyitb.supabase.co'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'ydgdmfpccfawlmqcyitb.supabase.co',
+        pathname: '**',
+      },
+    ],
+  },
+  // Optimizaciones para Next.js 15
+  experimental: {
+    instrumentationHook: false,
+    serverComponentsExternalPackages: [],
   },
 }
 
