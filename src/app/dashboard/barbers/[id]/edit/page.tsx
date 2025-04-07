@@ -1,173 +1,153 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useRouter, useParams } from "next/navigation";
+import { createClientComponentClient } from "@/lib/supabase/client";
+import toast from "react-hot-toast";
 
 interface Barber {
   id: string;
-  user: {
-    name: string;
-    email: string;
-  };
-  specialties: string[];
+  name: string;
+  specialties: string;
   commission: number;
 }
 
-export default function EditBarberPage({ params }: { params: { id: string } }) {
+export default function EditBarberPage() {
   const router = useRouter();
-  const { data: session } = useSession();
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [barber, setBarber] = useState<Barber | null>(null);
+  const params = useParams();
+  const supabase = createClientComponentClient();
+  const [loading, setLoading] = useState(true);
+  const [formData, setFormData] = useState({
+    name: "",
+    specialties: "",
+    commission: ""
+  });
 
   useEffect(() => {
-    const fetchBarber = async () => {
-      try {
-        const response = await fetch(`/api/barbers/${params.id}`);
-        if (!response.ok) {
-          throw new Error("Error al cargar el barbero");
-        }
-        const data = await response.json();
-        setBarber(data);
-      } catch (error) {
-        setError(error instanceof Error ? error.message : "Error al cargar el barbero");
-      }
-    };
-
-    fetchBarber();
+    if (params.id) {
+      fetchBarber(params.id as string);
+    }
   }, [params.id]);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    const data = {
-      name: formData.get("name"),
-      specialties: formData.get("specialties")?.toString().split(",").map(s => s.trim()),
-      commission: parseFloat(formData.get("commission") as string),
-    };
-
+  const fetchBarber = async (id: string) => {
     try {
-      const response = await fetch(`/api/barbers/${params.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Error al actualizar el barbero");
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        router.push("/login");
+        return;
       }
 
-      router.push("/dashboard/barbers");
-      router.refresh();
+      const { data, error } = await supabase
+        .from("barbers")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setFormData({
+          name: data.name || "",
+          specialties: data.specialties || "",
+          commission: data.commission?.toString() || ""
+        });
+      }
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Error al actualizar el barbero");
+      toast.error("Error al cargar datos del barbero");
     } finally {
       setLoading(false);
     }
   };
 
-  if (!barber) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    );
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        router.push("/login");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("barbers")
+        .update({
+          name: formData.name,
+          specialties: formData.specialties,
+          commission: parseFloat(formData.commission)
+        })
+        .eq("id", params.id);
+
+      if (error) throw error;
+
+      toast.success("Barbero actualizado exitosamente");
+      router.push("/dashboard/barbers");
+    } catch (error) {
+      toast.error("Error al actualizar el barbero");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
+  };
+
+  if (loading && !formData.name) {
+    return <div className="text-center p-4">Cargando...</div>;
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Editar Barbero</h1>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded mb-4">
-          {error}
-        </div>
-      )}
-
+    <div className="max-w-4xl mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4">Editar Barbero</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-            Nombre
-          </label>
+          <label className="block mb-1">Nombre</label>
           <input
             type="text"
-            id="name"
             name="name"
+            value={formData.name}
+            onChange={handleChange}
+            className="w-full p-2 border rounded"
             required
-            defaultValue={barber.user.name}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           />
         </div>
-
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-            Email
-          </label>
-          <input
-            type="email"
-            id="email"
-            value={barber.user.email}
-            disabled
-            className="mt-1 block w-full rounded-md border-gray-300 bg-gray-50 shadow-sm"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="specialties" className="block text-sm font-medium text-gray-700">
-            Especialidades (separadas por comas)
-          </label>
-          <input
-            type="text"
-            id="specialties"
+          <label className="block mb-1">Especialidades</label>
+          <textarea
             name="specialties"
-            required
-            defaultValue={barber.specialties.join(", ")}
-            placeholder="Ej: Corte de cabello, Afeitado, Tinte"
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            value={formData.specialties}
+            onChange={handleChange}
+            className="w-full p-2 border rounded"
+            rows={3}
           />
         </div>
-
         <div>
-          <label htmlFor="commission" className="block text-sm font-medium text-gray-700">
-            Comisión (%)
-          </label>
+          <label className="block mb-1">Comisión (%)</label>
           <input
             type="number"
-            id="commission"
             name="commission"
-            required
+            value={formData.commission}
+            onChange={handleChange}
+            className="w-full p-2 border rounded"
+            step="0.01"
             min="0"
             max="100"
-            step="0.01"
-            defaultValue={barber.commission}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            required
           />
         </div>
-
-        <div className="flex justify-end space-x-3">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-          >
-            {loading ? "Actualizando..." : "Actualizar Barbero"}
-          </button>
-        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
+        >
+          {loading ? "Guardando..." : "Guardar Cambios"}
+        </button>
       </form>
     </div>
   );
-} 
+}
