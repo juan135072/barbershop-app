@@ -1,6 +1,31 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClientComponentClient } from "@/lib/supabase/client";
 
 export default function Home() {
+  const router = useRouter();
+  const supabase = createClientComponentClient();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.push("/dashboard");
+      }
+      setLoading(false);
+    };
+
+    checkSession();
+  }, [router, supabase]);
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
       <div className="max-w-md w-full space-y-8 text-center">
