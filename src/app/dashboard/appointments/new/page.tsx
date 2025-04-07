@@ -1,285 +1,223 @@
-"use client";
+'use client'
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClientComponentClient } from '@/lib/supabase/client'
+import toast from 'react-hot-toast'
 
 interface Barber {
-  id: string;
-  user: {
-    name: string;
-  };
+  id: string
+  name: string
 }
 
 interface Service {
-  id: string;
-  name: string;
-  price: number;
-  duration: number;
+  id: string
+  name: string
+  price: number
+  duration: number
 }
 
 export default function NewAppointmentPage() {
-  const router = useRouter();
-  const { data: session } = useSession();
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [barbers, setBarbers] = useState<Barber[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+  const router = useRouter()
+  const supabase = createClientComponentClient()
+  const [loading, setLoading] = useState(false)
+  const [barbers, setBarbers] = useState<Barber[]>([])
+  const [services, setServices] = useState<Service[]>([])
+  const [formData, setFormData] = useState({
+    date: '',
+    start_time: '',
+    client_name: '',
+    client_phone: '',
+    client_email: '',
+    notes: '',
+    barber_id: '',
+    service_id: '',
+    status: 'pending'
+  })
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [barbersResponse, servicesResponse] = await Promise.all([
-          fetch("/api/barbers"),
-          fetch("/api/services"),
-        ]);
+    fetchBarbers()
+    fetchServices()
+  }, [])
 
-        if (!barbersResponse.ok || !servicesResponse.ok) {
-          throw new Error("Error al cargar los datos");
-        }
-
-        const [barbersData, servicesData] = await Promise.all([
-          barbersResponse.json(),
-          servicesResponse.json(),
-        ]);
-
-        setBarbers(barbersData);
-        setServices(servicesData);
-      } catch (error) {
-        setError(error instanceof Error ? error.message : "Error al cargar los datos");
+  const fetchBarbers = async () => {
+    try {
+      const { data: session } = await supabase.auth.getSession()
+      if (!session.session) {
+        router.push('/login')
+        return
       }
-    };
 
-    fetchData();
-  }, []);
+      const { data, error } = await supabase
+        .from('barbers')
+        .select('id, name')
 
-  const handleServiceChange = (serviceId: string) => {
-    const service = services.find(s => s.id === serviceId);
-    setSelectedService(service || null);
-    if (service) {
-      generateAvailableTimes(service.duration);
+      if (error) throw error
+      setBarbers(data || [])
+    } catch (error) {
+      toast.error('Error al cargar barberos')
     }
-  };
+  }
 
-  const generateAvailableTimes = (duration: number) => {
-    const times = [];
-    const startHour = 9; // 9 AM
-    const endHour = 19; // 7 PM
-    const interval = 30; // 30 minutos
+  const fetchServices = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('services')
+        .select('id, name, price, duration')
 
-    for (let hour = startHour; hour < endHour; hour++) {
-      for (let minute = 0; minute < 60; minute += interval) {
-        const time = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
-        times.push(time);
-      }
+      if (error) throw error
+      setServices(data || [])
+    } catch (error) {
+      toast.error('Error al cargar servicios')
     }
+  }
 
-    setAvailableTimes(times);
-  };
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    const startTime = formData.get("startTime") as string;
-    const duration = selectedService?.duration || 0;
-
-    // Calcular hora de fin basada en la duración del servicio
-    const [hours, minutes] = startTime.split(":").map(Number);
-    const endDate = new Date();
-    endDate.setHours(hours, minutes + duration);
-    const endTime = `${endDate.getHours().toString().padStart(2, "0")}:${endDate.getMinutes().toString().padStart(2, "0")}`;
-
-    const data = {
-      date: formData.get("date"),
-      startTime,
-      endTime,
-      clientName: formData.get("clientName"),
-      clientPhone: formData.get("clientPhone"),
-      clientEmail: formData.get("clientEmail"),
-      notes: formData.get("notes"),
-      barberId: formData.get("barberId"),
-      serviceId: formData.get("serviceId"),
-    };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
 
     try {
-      const response = await fetch("/api/appointments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Error al crear la cita");
+      const { data: session } = await supabase.auth.getSession()
+      if (!session.session) {
+        router.push('/login')
+        return
       }
 
-      router.push("/dashboard/appointments");
-      router.refresh();
+      const { error } = await supabase
+        .from('appointments')
+        .insert([formData])
+
+      if (error) throw error
+
+      toast.success('Cita creada exitosamente')
+      router.push('/dashboard/appointments')
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Error al crear la cita");
+      toast.error('Error al crear la cita')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }))
+  }
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Nueva Cita</h1>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded mb-4">
-          {error}
-        </div>
-      )}
-
+    <div className="max-w-4xl mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4">Nueva Cita</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="date" className="block text-sm font-medium text-gray-700">
-            Fecha
-          </label>
-          <input
-            type="date"
-            id="date"
-            name="date"
-            required
-            min={new Date().toISOString().split("T")[0]}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block mb-1">Fecha</label>
+            <input
+              type="date"
+              name="date"
+              value={formData.date}
+              onChange={handleChange}
+              className="w-full p-2 border rounded"
+              required
+            />
+          </div>
+          <div>
+            <label className="block mb-1">Hora</label>
+            <input
+              type="time"
+              name="start_time"
+              value={formData.start_time}
+              onChange={handleChange}
+              className="w-full p-2 border rounded"
+              required
+            />
+          </div>
+          <div>
+            <label className="block mb-1">Nombre del Cliente</label>
+            <input
+              type="text"
+              name="client_name"
+              value={formData.client_name}
+              onChange={handleChange}
+              className="w-full p-2 border rounded"
+              required
+            />
+          </div>
+          <div>
+            <label className="block mb-1">Teléfono</label>
+            <input
+              type="tel"
+              name="client_phone"
+              value={formData.client_phone}
+              onChange={handleChange}
+              className="w-full p-2 border rounded"
+              required
+            />
+          </div>
+          <div>
+            <label className="block mb-1">Email</label>
+            <input
+              type="email"
+              name="client_email"
+              value={formData.client_email}
+              onChange={handleChange}
+              className="w-full p-2 border rounded"
+              required
+            />
+          </div>
+          <div>
+            <label className="block mb-1">Barbero</label>
+            <select
+              name="barber_id"
+              value={formData.barber_id}
+              onChange={handleChange}
+              className="w-full p-2 border rounded"
+              required
+            >
+              <option value="">Seleccionar barbero</option>
+              {barbers.map(barber => (
+                <option key={barber.id} value={barber.id}>
+                  {barber.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block mb-1">Servicio</label>
+            <select
+              name="service_id"
+              value={formData.service_id}
+              onChange={handleChange}
+              className="w-full p-2 border rounded"
+              required
+            >
+              <option value="">Seleccionar servicio</option>
+              {services.map(service => (
+                <option key={service.id} value={service.id}>
+                  {service.name} - ${service.price}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-
         <div>
-          <label htmlFor="barberId" className="block text-sm font-medium text-gray-700">
-            Barbero
-          </label>
-          <select
-            id="barberId"
-            name="barberId"
-            required
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="">Selecciona un barbero</option>
-            {barbers.map((barber) => (
-              <option key={barber.id} value={barber.id}>
-                {barber.user.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label htmlFor="serviceId" className="block text-sm font-medium text-gray-700">
-            Servicio
-          </label>
-          <select
-            id="serviceId"
-            name="serviceId"
-            required
-            onChange={(e) => handleServiceChange(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="">Selecciona un servicio</option>
-            {services.map((service) => (
-              <option key={service.id} value={service.id}>
-                {service.name} - ${service.price} ({service.duration} min)
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label htmlFor="startTime" className="block text-sm font-medium text-gray-700">
-            Hora
-          </label>
-          <select
-            id="startTime"
-            name="startTime"
-            required
-            disabled={!selectedService}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="">Selecciona una hora</option>
-            {availableTimes.map((time) => (
-              <option key={time} value={time}>
-                {time}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label htmlFor="clientName" className="block text-sm font-medium text-gray-700">
-            Nombre del Cliente
-          </label>
-          <input
-            type="text"
-            id="clientName"
-            name="clientName"
-            required
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="clientPhone" className="block text-sm font-medium text-gray-700">
-            Teléfono del Cliente
-          </label>
-          <input
-            type="tel"
-            id="clientPhone"
-            name="clientPhone"
-            required
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="clientEmail" className="block text-sm font-medium text-gray-700">
-            Email del Cliente (opcional)
-          </label>
-          <input
-            type="email"
-            id="clientEmail"
-            name="clientEmail"
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="notes" className="block text-sm font-medium text-gray-700">
-            Notas (opcional)
-          </label>
+          <label className="block mb-1">Notas</label>
           <textarea
-            id="notes"
             name="notes"
+            value={formData.notes}
+            onChange={handleChange}
+            className="w-full p-2 border rounded"
             rows={3}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           />
         </div>
-
-        <div className="flex justify-end space-x-3">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-          >
-            {loading ? "Creando..." : "Crear Cita"}
-          </button>
-        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
+        >
+          {loading ? 'Creando...' : 'Crear Cita'}
+        </button>
       </form>
     </div>
-  );
-} 
+  )
+}
