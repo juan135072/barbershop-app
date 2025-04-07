@@ -21,10 +21,7 @@ const nextConfig = {
     ],
   },
   // Optimizaciones para Next.js 15
-  experimental: {
-    instrumentationHook: false,
-    serverComponentsExternalPackages: [],
-  },
+  serverExternalPackages: [],
 }
 
 module.exports = nextConfig
