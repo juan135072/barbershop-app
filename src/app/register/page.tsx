@@ -3,48 +3,80 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { createClientComponentClient } from "@/lib/supabase/client";
+import toast from "react-hot-toast";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const supabase = createClientComponentClient();
   const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    barbershopName: "",
+    address: "",
+    phone: "",
+    openingTime: "",
+    closingTime: ""
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError(null);
     setLoading(true);
 
-    const formData = new FormData(e.currentTarget);
-    const data = {
-      name: formData.get("name") as string,
-      email: formData.get("email") as string,
-      password: formData.get("password") as string,
-      barbershop: {
-        name: formData.get("barbershopName") as string,
-        address: formData.get("address") as string,
-        phone: formData.get("phone") as string,
-        openingTime: formData.get("openingTime") as string,
-        closingTime: formData.get("closingTime") as string,
-      },
-    };
-
     try {
-      const response = await fetch("/api/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
+      // 1. Registrar el usuario en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            name: formData.name
+          }
+        }
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Error al registrar");
-      }
+      if (authError) throw authError;
 
-      router.push("/login?registered=true");
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Error al registrar");
+      // 2. Crear la barbería en la tabla barbershops
+      const { data: barbershopData, error: barbershopError } = await supabase
+        .from('barbershops')
+        .insert([
+          {
+            name: formData.barbershopName,
+            address: formData.address,
+            phone: formData.phone,
+            opening_time: formData.openingTime,
+            closing_time: formData.closingTime,
+            owner_id: authData.user?.id
+          }
+        ])
+        .select()
+        .single();
+
+      if (barbershopError) throw barbershopError;
+
+      // 3. Actualizar el perfil del usuario con el id de la barbería
+      const { error: updateProfileError } = await supabase.auth.updateUser({
+        data: {
+          barbershop_id: barbershopData.id
+        }
+      });
+
+      if (updateProfileError) throw updateProfileError;
+
+      toast.success("Registro exitoso. Por favor, inicia sesión.");
+      router.push("/login");
+    } catch (error: any) {
+      toast.error(error.message || "Error al registrar");
     } finally {
       setLoading(false);
     }
@@ -68,11 +100,6 @@ export default function RegisterPage() {
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <label htmlFor="name" className="sr-only">
@@ -83,6 +110,8 @@ export default function RegisterPage() {
                 name="name"
                 type="text"
                 required
+                value={formData.name}
+                onChange={handleChange}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Nombre completo"
               />
@@ -96,6 +125,8 @@ export default function RegisterPage() {
                 name="email"
                 type="email"
                 required
+                value={formData.email}
+                onChange={handleChange}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Email"
               />
@@ -109,6 +140,8 @@ export default function RegisterPage() {
                 name="password"
                 type="password"
                 required
+                value={formData.password}
+                onChange={handleChange}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Contraseña"
               />
@@ -122,6 +155,8 @@ export default function RegisterPage() {
                 name="barbershopName"
                 type="text"
                 required
+                value={formData.barbershopName}
+                onChange={handleChange}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Nombre de la Barbería"
               />
@@ -135,6 +170,8 @@ export default function RegisterPage() {
                 name="address"
                 type="text"
                 required
+                value={formData.address}
+                onChange={handleChange}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Dirección"
               />
@@ -148,6 +185,8 @@ export default function RegisterPage() {
                 name="phone"
                 type="tel"
                 required
+                value={formData.phone}
+                onChange={handleChange}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Teléfono"
               />
@@ -162,6 +201,8 @@ export default function RegisterPage() {
                   name="openingTime"
                   type="time"
                   required
+                  value={formData.openingTime}
+                  onChange={handleChange}
                   className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 />
               </div>
@@ -174,6 +215,8 @@ export default function RegisterPage() {
                   name="closingTime"
                   type="time"
                   required
+                  value={formData.closingTime}
+                  onChange={handleChange}
                   className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 />
               </div>
@@ -193,4 +236,4 @@ export default function RegisterPage() {
       </div>
     </div>
   );
-} 
+}
