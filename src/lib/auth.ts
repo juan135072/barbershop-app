@@ -1,8 +1,16 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import { NextAuthOptions } from "next-auth";
+import { NextAuthOptions, getServerSession } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+
+interface User {
+  id: string;
+  email: string;
+  password: string;
+  role: string;
+  barbershopId: string;
+}
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -10,12 +18,12 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: "credentials",
       credentials: {
-        email: { label: "Email", type: "email" },
+        email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Credenciales inválidas");
+          throw new Error('Credenciales requeridas');
         }
 
         const user = await prisma.user.findUnique({
@@ -24,8 +32,8 @@ export const authOptions: NextAuthOptions = {
           }
         });
 
-        if (!user || !user.password) {
-          throw new Error("Credenciales inválidas");
+        if (!user || !user?.password) {
+          throw new Error('Usuario no encontrado');
         }
 
         const isCorrectPassword = await bcrypt.compare(
@@ -34,28 +42,30 @@ export const authOptions: NextAuthOptions = {
         );
 
         if (!isCorrectPassword) {
-          throw new Error("Credenciales inválidas");
+          throw new Error('Contraseña incorrecta');
         }
 
-        return user;
+        return user as User;
       }
     })
   ],
   session: {
     strategy: "jwt"
   },
+  secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === "development",
   pages: {
-    signIn: "/login",
-    error: "/login",
+    signIn: '/login'
   },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
+        const typedUser = user as User;
         return {
           ...token,
-          id: user.id,
-          role: (user as any).role,
-          barbershopId: (user as any).barbershopId,
+          id: typedUser.id,
+          role: typedUser.role,
+          barbershopId: typedUser.barbershopId,
         };
       }
       return token;
@@ -72,4 +82,6 @@ export const authOptions: NextAuthOptions = {
       };
     },
   },
-}; 
+};
+
+export const auth = () => getServerSession(authOptions); 

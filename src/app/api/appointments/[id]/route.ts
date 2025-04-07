@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/app/api/auth/[...nextauth]/route";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 interface SessionUser {
   id: string;
@@ -16,7 +17,7 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await auth();
+    const session = await getServerSession(authOptions);
     const user = session?.user as SessionUser;
     
     if (!user?.barbershopId) {

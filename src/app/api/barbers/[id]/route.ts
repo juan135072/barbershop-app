@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/app/api/auth/[...nextauth]/route";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { PrismaClient } from "@prisma/client";
 
 interface SessionUser {
@@ -17,7 +18,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await auth();
+    const session = await getServerSession(authOptions);
     const user = session?.user as SessionUser;
     
     if (!user?.barbershopId) {
@@ -64,7 +65,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await auth();
+    const session = await getServerSession(authOptions);
     const user = session?.user as SessionUser;
     
     if (!user?.barbershopId) {
@@ -118,7 +119,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await auth();
+    const session = await getServerSession(authOptions);
     const user = session?.user as SessionUser;
     
     if (!user?.barbershopId) {
