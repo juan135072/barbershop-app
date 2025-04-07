@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClientComponentClient } from '@/lib/supabase/client'
 
 export function RegisterForm() {
   const [email, setEmail] = useState('')
@@ -14,7 +14,7 @@ export function RegisterForm() {
     setError(null)
 
     try {
-      const supabase = createClient()
+      const supabase = createClientComponentClient()
       
       // Register user
       const { error: signUpError, data } = await supabase.auth.signUp({
@@ -107,4 +107,4 @@ export function RegisterForm() {
       </button>
     </form>
   )
-} 
+}
